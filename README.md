@@ -841,3 +841,47 @@ gitpkg:verify-lib
 - Test run: `make test` or `bash tests/test.sh` or `python -m pytest tests/ -v` or `go test ./...`
 - Man compile: `pandoc -s -t man cmd.8.md -o cmd.8`
 - SOPS: `sops -d secrets.enc.yaml`
+
+## 13. C# / .NET
+
+### Resource Management
+```csharp
+// Always use `using` for IDisposable (StreamReader, FileStream, XmlReader, etc.)
+using var reader = new StreamReader(path, encoding);
+// No explicit Close() needed — disposed on scope exit or exception.
+```
+
+### Async / UI Thread Marshaling
+```csharp
+// Install a custom SynchronizationContext in Program.cs to marshal
+// `await` continuations back to the UI main loop (GTK/WinForms/etc.).
+private async void OnButtonClicked(object sender, EventArgs e)
+{
+    sender.SetSensitive(false);
+    var result = await Task.Run(() => HeavyComputation());
+    UpdateUI(result); // Safe: runs on main thread
+    sender.SetSensitive(true);
+}
+```
+
+### Parallel Processing with Cancellation
+```csharp
+var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = MaxThreads };
+Parallel.ForEach(workItems, parallelOptions, (item, state) =>
+{
+    if (cancellationToken.IsCancellationRequested) { state.Stop(); return; }
+    Process(item);
+});
+```
+
+### Testing (xUnit)
+- Disable parallelization if tests share mutable static state: `[assembly: CollectionBehavior(DisableTestParallelization = true)]`
+- Reset singletons in constructor/dispose to avoid pollution.
+- Use `Path.GetTempPath()` + `Guid` for isolated temp dirs. Clean up in `IDisposable.Dispose()`.
+- Mock external CLI tools or use temp files for I/O tests.
+
+### File I/O Safety
+- Atomic writes: write to `.tmp` extension, then `File.Move(tmp, final, overwrite: true)`.
+- Never hardcode paths: use `Path.Combine`, `Environment.GetFolderPath`.
+- Validate extensions before parsing: `Path.GetExtension(path).ToLowerInvariant()`.
+- Always wrap `StreamReader`/`FileStream` in `using` to prevent descriptor leaks.
