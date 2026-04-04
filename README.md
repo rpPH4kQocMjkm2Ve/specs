@@ -63,6 +63,16 @@ When rules conflict, apply in this order:
 | `go.mod` / `go.sum` | Module definition and dependencies |
 | `Makefile` | `build`, `install`, `uninstall`, `test`, `test-root`, `clean` |
 
+### C# / .NET Projects
+| Path | Purpose |
+|------|---------|
+| `<ProjectName>/` | Main application source (`.cs` files) |
+| `<ProjectName>.Tests/` | xUnit test project (`*_Tests.cs`) |
+| `<ProjectName>.csproj` | SDK-style project file (`net10.0`, `AllowUnsafeBlocks`, etc.) |
+| `<ProjectName>.Tests.csproj` | Test project, references main project |
+| `tests.md` | Test documentation (instead of `tests/README.md`) |
+| `Makefile` | `build`, `install`, `uninstall`, `test`, `clean` |
+
 ## 2. SHELL (BASH)
 
 ### Header & Strictness
@@ -275,6 +285,41 @@ uninstall:
 	rm -rf $(DESTDIR)$(LICENSEDIR)/
 ```
 
+### C# / .NET Makefile
+```makefile
+.PHONY: build install uninstall test clean
+
+PREFIX   = /usr
+DESTDIR  =
+pkgname  = project-name
+
+BINDIR     = $(PREFIX)/bin
+LIBDIR     = $(PREFIX)/lib/$(pkgname)
+LICENSEDIR = $(PREFIX)/share/licenses/$(pkgname)
+
+PROJECT = project-name
+TESTS   = $(PROJECT).Tests
+
+build:
+	dotnet build $(PROJECT)/$(PROJECT).csproj -c Release
+
+test:
+	dotnet test $(TESTS)/$(TESTS).csproj --no-build -v normal
+
+clean:
+	dotnet clean $(PROJECT)/$(PROJECT).csproj
+	rm -rf $(PROJECT)/bin $(PROJECT)/obj
+	rm -rf $(TESTS)/bin $(TESTS)/obj
+
+install: build
+	install -Dm755 $(PROJECT)/bin/Release/net10.0/$(PROJECT) $(DESTDIR)$(BINDIR)/$(PROJECT)
+	install -Dm644 LICENSE $(DESTDIR)$(LICENSEDIR)/LICENSE
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(PROJECT)
+	rm -rf $(DESTDIR)$(LICENSEDIR)/
+```
+
 ### Key Conventions
 - `PREFIX = /usr` (not `/usr/local`)
 - `DESTDIR =` (empty by default)
@@ -283,6 +328,7 @@ uninstall:
 - `test` runs shell scripts and pytest separately
 - License installs to `$(SHAREDIR)/licenses/$(pkgname)`
 - Go: `CGO_ENABLED=0`, `-trimpath`, `-buildmode=pie`, version via `-ldflags`
+- C#: `dotnet build -c Release`, `dotnet test --no-build`
 
 ## 4. PYTHON
 
@@ -775,6 +821,10 @@ CGO_ENABLED=0 go build -trimpath -buildmode=pie -ldflags "-X main.version=$(VERS
 
 ## 7. TESTING
 
+### Test documentation: `tests/README.md` vs `tests.md`
+- **`tests/README.md`** — for Shell/Python/C projects where `tests/` is a directory containing test scripts (`test_config.sh`, `test_module.py`, etc.). The README lives inside that directory.
+- **`tests.md`** — for Go and C# projects where tests are part of the build system (`*_test.go` packages, `*.Tests.csproj` projects) and there is no standalone `tests/` script directory. The file lives at the repository root.
+
 ### Shell/Python: `tests/README.md`
 ```markdown
 # Tests
@@ -1008,6 +1058,42 @@ Guarded by `skipIfNotRoot`. Run via `make test-root` (sudo).
 - No real home directories or system files are touched
 - Root-only tests skip with `t.Skip("requires root")` when run as non-root
 
+### C# / .NET: `tests.md`
+```markdown
+# Tests
+
+## Overview
+
+| Project | File | Framework | What it tests |
+|---------|------|-----------|---------------|
+| `subs2srs.Tests` | `UtilsSubsTests.cs` | xUnit | Time formatting, padding, overlap |
+| `subs2srs.Tests` | `PrefIOTests.cs` | xUnit | JSON round-trip, migration, defaults |
+| `subs2srs.Tests` | `ProjectIOTests.cs` | xUnit | `.s2s.json` save/load, corruption handling |
+
+## Running
+
+```bash
+# All tests
+make test
+
+# Individual suite
+dotnet test subs2srs.Tests/subs2srs.Tests.csproj --filter "FullyQualifiedName~UtilsSubsTests"
+```
+
+## How they work
+
+### xUnit suites
+- **Parallelization disabled**: `[assembly: CollectionBehavior(DisableTestParallelization = true)]` prevents race conditions on mutable static state.
+- **Singleton reset**: `Settings.Instance.reset()` called in constructor and `Dispose()` to isolate test state.
+- **Temp directories**: `Path.GetTempPath()` + `Guid` creates isolated dirs. Cleaned up via `IDisposable.Dispose()`.
+- **Mocking**: External CLI tools are not invoked. File I/O tests use real temp files.
+
+## Test environment
+- All tests create temporary directories via `Path.Combine(Path.GetTempPath(), ...)` and clean up in `Dispose()`
+- No root privileges required
+- No real media files, subtitles, or system paths are touched
+- Tests run sequentially to avoid singleton pollution
+
 ## 8. COMPLETIONS
 
 ### Zsh (`_cmd`)
@@ -1140,7 +1226,8 @@ gitpkg:verify-lib
 - Python entry: `if __name__ == "__main__": main()`
 - Go main: `func main() { if err := run(); err != nil { fmt.Fprintf(os.Stderr, "project: %v\n", err); os.Exit(1) } }`
 - Go build: `CGO_ENABLED=0 go build -trimpath -buildmode=pie -ldflags "-X main.version=$(VERSION)"`
-- Test run: `make test` or `bash tests/test.sh` or `python -m pytest tests/ -v` or `go test ./...`
+- C# build: `dotnet build Project/Project.csproj -c Release`
+- Test run: `make test` or `bash tests/test.sh` or `python -m pytest tests/ -v` or `go test ./...` or `dotnet test Tests/Tests.csproj`
 - Man compile: `pandoc -s -t man cmd.8.md -o cmd.8`
 - SOPS: `sops -d secrets.enc.yaml`
 
