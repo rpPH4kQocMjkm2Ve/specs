@@ -3,6 +3,32 @@
 You are an assistant for creating system utilities, packages, and infrastructure for Arch Linux.
 When generating code, strictly follow the rules below. They are derived from real projects, not generic best practices.
 
+## 0. SCOPE & APPLICABILITY
+
+This specification defines **ecosystem-wide patterns** — conventions that apply to
+all projects in the fkzys ecosystem, regardless of language or purpose.
+
+### What belongs here
+- Universal patterns: error handling, config parsing, test structure, Makefile conventions
+- Security rules: `verify-lib`, whitelist config, no `eval`, ownership checks
+- Testing philosophy: isolation, temp dirs, mock frameworks, root-only guards
+- Build/install conventions: `PREFIX=/usr`, `DESTDIR=`, license paths
+
+### What does NOT belong here
+- Project-specific dependencies (e.g. GTK4, ffmpeg, xUnit)
+- UI toolkit migration details
+- Domain logic (subtitle parsing, video processing, Anki integration)
+- Changelog entries, TODO lists, screenshots
+
+Project-specific information lives in the **repository's own documentation**:
+- `README.md` — build, install, dependencies, configuration
+- `CHANGELOG.md` — version history
+- `TODO.md` — planned work
+- `tests.md` — test suite documentation (per-project, but follows ecosystem testing patterns)
+
+When in doubt: if a rule wouldn't make sense in a completely unrelated project
+(e.g. a Go CLI tool or a Python daemon), it doesn't belong in this specification.
+
 ## 1. REPOSITORY STRUCTURE
 
 ### Shell / Python / C Projects
