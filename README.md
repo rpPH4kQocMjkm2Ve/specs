@@ -19,6 +19,7 @@ all projects in the fkzys ecosystem, regardless of language or purpose.
 - UI toolkit migration details
 - Domain logic (subtitle parsing, video processing, Anki integration)
 - Changelog entries, TODO lists, screenshots
+- Infrastructure-as-code deployment patterns (Jinja2 services, SOPS secrets, Terraform) — covered in §9
 
 Project-specific information lives in the **repository's own documentation**:
 - `README.md` — build, install, dependencies, configuration
@@ -28,6 +29,20 @@ Project-specific information lives in the **repository's own documentation**:
 
 When in doubt: if a rule wouldn't make sense in a completely unrelated project
 (e.g. a Go CLI tool or a Python daemon), it doesn't belong in this specification.
+
+### What is NOT a package
+
+The following project types are **infrastructure or data**, not installable packages.
+Conventions like `Makefile` (PREFIX/DESTDIR), `depends`, `bin/`, `lib/`,
+`tests/README.md`, and `verify-lib` do not apply to them:
+
+| Type | Examples | What applies |
+|------|----------|--------------|
+| Infrastructure-as-code | `infra`, `tf-infra` | §4 (Python patterns), §9 (SOPS, Jinja2), README |
+| Container images | `sing-box` | Dockerfile conventions, CI validation |
+| Dotfiles / config repos | `root_m`, `dotfiles` | dotm patterns (`dotm.toml`, `perms`, `.sops.yaml`) |
+| Data / rule sets | `sing-box_srs` | `build.sh` with `set -euo pipefail` |
+| Profiles / documentation | `gitlab-profile`, `packages` | README only |
 
 ### 0.1 RULE PRIORITY
 When rules conflict, apply in this order:
@@ -87,6 +102,11 @@ set -euo pipefail
 - System scripts: `#!/bin/bash`
 - Libraries: `#!/usr/bin/env bash`
 - If a file is both entry point and library (rare), use `#!/bin/bash`.
+
+**Exceptions (no `set -euo pipefail` required):**
+- **Test files** — use `set -uo pipefail` (no `-e`). Tests must continue executing when assertions fail so failures can be counted and reported. See §7 for test harness patterns.
+- **Wrapper scripts** — thin scripts that `cd` to a config directory and `exec` a binary (e.g. `dist/subs2srs.sh`). These are simple launchers, not business logic. If the `exec` fails, there is nothing left to do.
+- **Intentional guard scripts** — scripts that rely on conditional control flow incompatible with `errexit`. Must include a comment explaining the omission.
 
 ### Secure Library Sourcing
 ```bash
@@ -877,6 +897,9 @@ Standard pytest suites. No system access — all filesystem operations use `tmp_
 # Sourced by individual test files — NOT run directly.
 
 set -uo pipefail
+# Note: no -e. Tests must continue running when assertions fail
+# so failures can be counted and reported by summary().
+```
 
 PASS=0; FAIL=0; TESTS=0
 
@@ -1155,6 +1178,17 @@ complete -F _project_name project-name
 
 ## 9. INFRASTRUCTURE (Python + Jinja2 + SOPS)
 
+Infrastructure projects (`infra`, `tf-infra`) manage server
+configurations, DNS records, and service deployments. They are **not installable
+packages** — conventions like `Makefile` (PREFIX/DESTDIR), `depends`, `bin/`,
+`lib/`, `tests/README.md`, and `verify-lib` do not apply.
+
+What does apply:
+- §4 Python patterns: entry points, error handling (`sys.exit(1)`, stderr), SOPS helper
+- Jinja2 templating for service configs
+- SOPS-encrypted secrets (`.sops.yaml`, `secrets.enc.yaml`)
+- Tests use pytest with mocked SSH/HTTP (§7 Python test patterns)
+
 ### ServiceDeployer Pattern
 ```python
 class ServiceDeployer:
@@ -1209,10 +1243,10 @@ gitpkg:verify-lib
 
 > **Note:** This section governs how you generate code, not the code itself. Apply these rules when responding to requests in this ecosystem.
 
-1. **Verify structure** (`Makefile`, `depends`, `lib/`, `tests/` or `tests.md`) before adding files.
-2. **Apply standards automatically**: `set -euo pipefail`, whitelist config parser, `verify-lib` sourcing, `printf -v` instead of `eval`, explicit shopt restore.
+1. **Verify structure** (`Makefile`, `depends`, `lib/`, `tests/` or `tests.md`) before adding files. For infrastructure projects (§9), these do not apply.
+2. **Apply standards automatically**: `set -euo pipefail` (except in test files, wrappers, and guard scripts — see §2), whitelist config parser, `verify-lib` sourcing, `printf -v` instead of `eval`, explicit shopt restore.
 3. **No placeholders**. Provide complete, runnable code.
-4. **Include tests** or update test documentation when adding features.
+4. **Include tests** or update test documentation when adding features. Test files use `set -uo pipefail` (no `-e`) — failures are counted, not caught by errexit.
 5. **Flag** `eval`, `chmod 777`, hardcoded secrets, missing ownership checks, `/tmp` usage for scripts.
 6. **Ask if uncertain** about paths, versions, or flags before generating.
 
@@ -1220,6 +1254,7 @@ gitpkg:verify-lib
 
 - Shell header: `#!/bin/bash\nset -euo pipefail`
 - Library header: `#!/usr/bin/env bash`
+- Test file header: `#!/usr/bin/env bash\nset -uo pipefail` (no `-e` — see §2 exceptions)
 - Error: `echo "ERROR: msg" >&2; exit 1`
 - Config check: `[[ -n "${VAR:-}" ]] || { echo "ERROR: VAR not defined" >&2; exit 1; }`
 - Make install: `install -Dm755 bin/cmd $(DESTDIR)$(PREFIX)/bin/cmd`
