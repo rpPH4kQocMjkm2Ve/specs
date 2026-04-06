@@ -359,7 +359,7 @@ uninstall:
 - `DESTDIR =` (empty by default)
 - Config is never overwritten if it already exists
 - `man` target generates from `.md` via `pandoc`
-- `test` runs shell scripts and pytest separately
+- `test` target is language-specific: `bash tests/test.sh` (shell), `go test ./...` (Go), `pytest` (Python — optional, not all projects have it), `dotnet test` (C#)
 - License installs to `$(SHAREDIR)/licenses/$(pkgname)`
 - Go: `CGO_ENABLED=0`, `-trimpath`, `-buildmode=pie`, version via `-ldflags`
 - C#: `dotnet build -c Release`, `dotnet test --no-build`
@@ -403,7 +403,7 @@ print(f"Error: description of the error", file=sys.stderr)
 sys.exit(1)
 ```
 
-### Tests (unittest-style with pytest)
+### Tests (class-based assertion groups, compatible with pytest runner)
 ```python
 """Tests for project_name/module.py — pure parsing functions."""
 
