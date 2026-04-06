@@ -1309,3 +1309,30 @@ Parallel.ForEach(workItems, parallelOptions, (item, state) =>
 - Never hardcode paths: use `Path.Combine`, `Environment.GetFolderPath`.
 - Validate extensions before parsing: `Path.GetExtension(path).ToLowerInvariant()`.
 - Always wrap `StreamReader`/`FileStream` in `using` to prevent descriptor leaks.
+
+## 14. COPYRIGHT & LICENSING
+
+Copyright (c) 2026 fkzys
+
+This specification and its embedded architectural patterns are dual-licensed. You may use this project under either the Open Source (Copyleft) licenses or a Commercial License.
+
+### 1. Open Source (Copyleft)
+
+Under the open-source model, the following copyleft licenses apply:
+
+* **Specification Text & Documentation:** Licensed under the **Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**. Any modified versions or derived specifications must be shared under the identical license.
+* **Code Snippets & Architecture:** All embedded code blocks, Makefiles, bash functions (e.g., `test_harness.sh`), C sources (e.g., `verify-lib.c`), Go structures, and infrastructure templates (Jinja2/Terraform patterns) are licensed under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
+
+**Note on Implementations:**
+Any tools, infrastructure-as-code deployments (§9), or systems that incorporate, copy, or adapt the code snippets and architectural patterns defined in this specification are considered derivative works. These must be distributed under the **AGPL-3.0-or-later** license. This explicitly includes network-interacting infrastructure covered by the AGPL network interaction clause.
+
+### 2. Commercial License
+
+If you wish to use this specification, implement its patterns, or use its associated tools (`gitpkg`, `infra`, `verify-lib`, etc.) in a proprietary, closed-source product, or if your policies prohibit the use of AGPLv3 software, a **Commercial License** is available.
+
+A commercial license grants a legal waiver from the AGPLv3 and CC BY-SA 4.0 copyleft requirements, permitting the use, modification, and integration of this work into private or commercial infrastructure without the obligation to disclose source code.
+
+Please contact **[main.component985@passfwd.com]** for commercial licensing inquiries.
+
+---
+*Unless required by applicable law or agreed to in writing, the specification and code distributed under the Open Source licenses are distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.*
