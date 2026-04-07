@@ -122,6 +122,30 @@ set -euo pipefail
 - **Wrapper scripts** — thin scripts that `cd` to a config directory and `exec` a binary (e.g. `dist/subs2srs.sh`). These are simple launchers, not business logic. If the `exec` fails, there is nothing left to do.
 - **Intentional guard scripts** — scripts that rely on conditional control flow incompatible with `errexit`. Must include a comment explaining the omission.
 
+### CLI Conventions
+All bash entry points MUST support:
+
+- **`-V` / `--version`** — Print program name and version, then exit 0
+- **`--help` / `-h`** — Print usage information, then exit 0
+
+Both are mandatory for all user-facing shell scripts. The project must also provide:
+- **man page** (`man/project.8.md`) — compiled via the Makefile `man` target
+- **shell completions** (`completions/_project` for zsh, `completions/project.bash` for bash) — see §8
+
+#### Version Function
+
+The `version` function lives in `lib/common.sh`, if that file is present in the project. The entry point sources `common.sh` and delegates to it:
+
+```bash
+case "${1:-}" in
+    -V|--version) cmd_version; exit 0 ;;
+    -h|--help)    print_usage; exit 0 ;;
+    *)            main "$@" ;;
+esac
+```
+
+This keeps version output consistent across all projects and centralises the source of truth in a single library file.
+
 ### Secure Library Sourcing
 ```bash
 readonly LIBDIR="/usr/lib/project"
@@ -1145,6 +1169,7 @@ _project_name() {
 
     _arguments -C \
         '(- *)'{-h,--help}'[Show help]' \
+        '(- *)'{-V,--version}'[Show version]' \
         '1:command:((
             subcmd1\:"Description"
             subcmd2\:"Description"
@@ -1178,7 +1203,7 @@ _project_name() {
     _init_completion || return
 
     if [[ $cword -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "subcmd1 subcmd2 -h --help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "subcmd1 subcmd2 -h --help -V --version" -- "$cur") )
         return
     fi
 
@@ -1323,7 +1348,36 @@ Parallel.ForEach(workItems, parallelOptions, (item, state) =>
 - Validate extensions before parsing: `Path.GetExtension(path).ToLowerInvariant()`.
 - Always wrap `StreamReader`/`FileStream` in `using` to prevent descriptor leaks.
 
-## 14. COPYRIGHT & LICENSING
+## 14. VERSIONING
+
+### Git Tags
+
+All releases MUST be tagged with annotated, signed git tags:
+
+```bash
+git tag -s -a v0.0.1 -m 'v0.0.1'
+git push origin v0.0.1
+```
+
+- **`-s`** — sign the tag
+- **`-a`** — create an annotated tag (stores tagger, date, message as a full Git object)
+- Both flags are explicit: `-s` implies `-a`, but writing both makes intent clear
+
+Version format: `v<major>.<minor>.<patch>` (semantic versioning with `v` prefix).
+
+### Signed Commits
+
+All commits MUST be signed:
+
+```bash
+git commit -S -m 'description'
+```
+
+- **`-S`** — sign the commit
+
+This applies to both human-authored and LLM-generated commits. When LLM assistants generate code, the human reviewer must sign the resulting commit.
+
+## COPYRIGHT & LICENSING
 
 Copyright (c) 2026 fkzys
 
