@@ -1455,6 +1455,7 @@ This section defines how code must be generated when working with fkzys projects
 5. **Flag** `eval`, `chmod 777`, hardcoded secrets, missing ownership checks, `/tmp` usage for scripts.
 6. **Ask if uncertain** about paths, versions, or flags before generating.
 7. **When editing this specification**, new top-level sections are appended at the end with the next sequential number. Subsections MUST use dot notation (e.g., §8.1 MAN PAGES). Existing section numbers MUST NOT be changed.
+8. **Before committing**, verify what will be included. Run `git status`, `git diff`, and `git diff --cached` to confirm all changes — staged and unstaged — match intent. Never use `git add -A && git commit` without stating expected contents.
 
 ## 12. QUICK TEMPLATES
 
