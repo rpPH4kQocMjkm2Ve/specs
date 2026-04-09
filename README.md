@@ -1229,6 +1229,162 @@ _project_name() {
 complete -F _project_name project-name
 ```
 
+## 8.1. MAN PAGES
+
+All user-facing CLI tools MUST provide a man page. Man pages are written in Markdown and compiled to roff via `pandoc -s -t man`. Source files live in `man/`.
+
+### Naming
+
+| File pattern | Section | Purpose |
+|--------------|---------|---------|
+| `project-name.8.md` | 8 | CLI commands, system utilities |
+| `project-name.conf.5.md` | 5 | Configuration file formats |
+
+### YAML Front Matter
+
+```yaml
+---
+title: PROJECT-NAME
+section: 8
+header: System Administration
+footer: project-name
+---
+```
+
+| Field | Purpose |
+|-------|---------|
+| `title` | Uppercase project name (matches `.TH` title) |
+| `section` | Man section: `8` for commands, `5` for file formats |
+| `header` | Center header (e.g., `System Administration`, `File Formats`) |
+| `footer` | Lower-right corner — project name |
+
+Omit `date`.
+
+### Required Sections (section 8 — commands)
+
+```markdown
+# NAME
+
+project-name — short description
+
+# SYNOPSIS
+
+**project-name** \<command\> [options]
+
+# DESCRIPTION
+
+What the tool does, how it works.
+
+# COMMANDS
+
+**apply** [-n|--dry-run]
+:   What this command does.
+
+**status**
+:   What this command does.
+
+# OPTIONS
+
+**-h**, **--help**
+:   Show usage and exit.
+
+**-V**, **--version**
+:   Print version and exit.
+
+# EXAMPLES
+
+Typical usage:
+
+    project-name apply
+
+Preview:
+
+    project-name apply --dry-run
+
+# EXIT STATUS
+
+**0**
+:   Success.
+
+**1**
+:   Error. Common causes.
+
+# FILES
+
+**~/.local/state/project-name/\***
+:   State files.
+
+# SEE ALSO
+
+**related-tool**(8)
+
+# BUGS
+
+Report bugs at \<URL\>
+
+# LICENSE
+
+AGPL-3.0-or-later
+```
+
+### Required Sections (section 5 — config files)
+
+```markdown
+# NAME
+
+project.conf — configuration for project-name
+
+# SYNOPSIS
+
+*/etc/project.conf*
+
+# DESCRIPTION
+
+What the config file is for, who reads it.
+
+Format description (KEY=VALUE, TOML, YAML, etc.). Security requirements (ownership, no eval).
+
+# OPTIONS
+
+**KEY_NAME**
+:   Description. Default: *value*.
+
+# SECURITY
+
+Ownership requirements, parsing restrictions, what is rejected.
+
+# EXAMPLES
+
+Minimal config:
+
+    # /etc/project.conf
+    KEY_NAME = value
+
+# SEE ALSO
+
+**project-name**(8)
+```
+
+### Makefile Integration
+
+```makefile
+MANPAGES = man/project-name.8
+
+man: $(MANPAGES)
+
+man/%.8: man/%.8.md
+	pandoc -s -t man -o $@ $<
+
+clean:
+	rm -f $(MANPAGES)
+
+install: man
+	install -Dm644 man/project-name.8 $(DESTDIR)$(MANDIR)/man8/project-name.8
+
+uninstall:
+	rm -f $(DESTDIR)$(MANDIR)/man8/project-name.8
+```
+
 ## 9. INFRASTRUCTURE (Python + Jinja2 + SOPS)
 
 Infrastructure projects (`infra`, `tf-infra`) manage server configurations, DNS records, and service deployments. They are **not installable packages** — conventions like `Makefile` (PREFIX/DESTDIR), `depends`, `bin/`, `lib/`, `tests/README.md`, and `verify-lib` do not apply.
@@ -1313,6 +1469,7 @@ This section defines how code must be generated when working with fkzys projects
 - Go build: `CGO_ENABLED=0 go build -trimpath -buildmode=pie -ldflags "-X main.version=$(VERSION)"`
 - C# build: `dotnet build Project/Project.csproj -c Release`
 - Test run: `make test` or `bash tests/test.sh` or `python -m pytest tests/ -v` or `go test ./...` or `dotnet test Tests/Tests.csproj`
+- Man YAML: `title: NAME\nsection: 8\nheader: System Administration\nfooter: project-name` (no `date`)
 - Man compile: `pandoc -s -t man cmd.8.md -o cmd.8`
 - SOPS: `sops -d secrets.enc.yaml`
 
