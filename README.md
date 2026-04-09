@@ -13,7 +13,7 @@ When generating code for any fkzys project, assistants must follow the rules def
 |-----------|-------|
 | Scope | Ecosystem-wide (all fkzys projects) |
 | Authority | Definitive — overrides project-local conventions where conflicts exist |
-| Last updated | 2026-04-08 |
+| Last updated | 2026-04-09 |
 | License | CC BY-SA 4.0 (text) / AGPL-3.0-or-later (code patterns) — see §14 |
 
 ## How to Read This Document
@@ -1445,11 +1445,13 @@ gitpkg:verify-lib
 - `gitpkg:<name>` — Project managed by `gitpkg`. Resolved from configured base URLs or collections. Cloned, built, and installed via `gitpkg install <name>`.
 - `# comment` — Ignored by parsers.
 
+**Go projects do not use `depends`.** Dependencies are managed by `go.mod`/`go.sum`. The `depends` file is only for shell, Python, C, and other projects without a native dependency manager.
+
 ## 11. CODE GENERATION PROTOCOL
 
 This section defines how code must be generated when working with fkzys projects. Assistants and developers creating new code must follow these rules.
 
-1. **Verify structure** (`Makefile`, `depends`, `lib/`, `tests/` or `tests.md`) before adding files. For infrastructure projects (§9), these do not apply.
+1. **Verify structure** (`Makefile`, `lib/`, `tests/` or `tests.md`) before adding files. For infrastructure projects (§9), these do not apply. Go projects use `go.mod` instead of `depends`.
 2. **Apply standards automatically**: `set -euo pipefail` (except in test files, wrappers, and guard scripts — see §2), whitelist config parser, `verify-lib` sourcing, `printf -v` instead of `eval`, explicit shopt restore.
 3. **No placeholders**. Provide complete, runnable code.
 4. **Include tests** or update test documentation when adding features. Test files use `set -uo pipefail` (no `-e`) — failures are counted, not caught by errexit.
