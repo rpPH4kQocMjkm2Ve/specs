@@ -1470,6 +1470,7 @@ This section defines how code must be generated when working with fkzys projects
 6. **Ask if uncertain** about paths, versions, or flags before generating.
 7. **When editing this specification**, new top-level sections are appended at the end with the next sequential number. Subsections MUST use dot notation (e.g., §8.1 MAN PAGES). Existing section numbers MUST NOT be changed.
 8. **Before committing**, verify what will be included. Run `git status`, `git diff`, and `git diff --cached` to confirm all changes — staged and unstaged — match intent. Never use `git add -A && git commit` without stating expected contents.
+9. **Comments explain why, not what.** Comments should describe the reasoning behind a decision (`# avoid eval: TOCTOU risk`) or document non-obvious behaviour (`# on-load: one git status call, parse all files`). Never comment on what code obviously does (`# iterate files`, `# call function`). Omit trivial comments entirely.
 
 ## 12. QUICK TEMPLATES
 
@@ -1685,6 +1686,123 @@ Example — Go project with `dorny/paths-filter`:
 Shell projects SHOULD run `shellcheck` in CI. Python projects SHOULD run
 `ruff` and `mypy`. C projects SHOULD run `cppcheck`. Go projects SHOULD
 run `go vet`.
+
+## 16. ASYNC HOOKS WITH DAEMON COMMUNICATION
+
+When an interactive tool supports hook commands (e.g. `on-load`, `on-cd`,
+`on-init`, `on-select`) that communicate with a long-running daemon via IPC
+(sockets, remote commands, D-Bus), a **race condition** exists between the
+tool's client registration and the hook's first IPC call.
+
+### The Problem
+
+Hooks that run asynchronously may execute before the tool's client ID is
+registered with the daemon. This means the first IPC call silently fails —
+the daemon has no record of the client to deliver the message to.
+
+This manifests as:
+- **Works after navigation**: Hook fires correctly when user navigates (client
+  already registered), but fails on initial load
+- **Works on restart**: Hook works when tool is restarted in the same directory
+  or session (client was registered during previous session)
+- **No error output**: Daemon drops messages to unregistered clients without
+  feedback to the hook script
+
+### Anti-pattern: `sleep` and Retry Loops
+
+Hook scripts **MUST NOT** use `sleep`, polling loops, or busy-wait retries
+to wait for daemon readiness. Sleep duration depends on CPU speed, I/O
+latency, and system load, and is not deterministic. Timing-based waits
+**MUST NOT** be used for IPC communication via pipes, Unix sockets, D-Bus,
+or remote commands. The only acceptable synchronization mechanisms are:
+- Barrier I/O waits (e.g. `tcdrain`) for output completion
+- Two-phase initialization (`on-init` → `reload` → `on-load`)
+
+### The Pattern
+
+Use a two-phase approach:
+
+1. **Synchronous initialization hook** (`on-init`, `setup`, or equivalent)
+   runs after the tool's client is fully registered with the daemon. Use it
+   to trigger a reload or re-sync event.
+
+2. **Asynchronous work hook** (`on-load`, `on-cd`, or equivalent) performs
+   the actual work. When triggered by the reload from phase 1, the daemon
+   already knows about the client and delivers IPC messages.
+
+Generic flow:
+```
+tool starts → daemon registers client → on-init fires (sync)
+    → on-init triggers reload → on-load fires (async, client registered)
+    → IPC calls succeed
+```
+
+### Barrier Synchronization
+
+When the tool provides a way to wait for I/O completion, use it as a
+synchronization barrier to ensure output is fully transmitted before the next
+render cycle begins.
+
+Example using `tcdrain` (waits until all buffered output on a file descriptor
+is transmitted):
+```bash
+cmd previewer &{{
+    # Send image to terminal via file descriptor 3
+    send_image "$1" >&3
+    # Wait until TTY output buffer is fully flushed
+    perl -MPOSIX -e 'POSIX::tcdrain(3)'
+}}
+```
+
+This prevents the tool from rendering the next screen update while the
+previous output is still being drawn (flicker, partial images, corrupted
+terminal state). The descriptor number must not conflict with other hooks
+(e.g. `3` is commonly used for preview output — match the fd used by the
+sending command).
+
+### Applicability
+
+This pattern applies to any tool where:
+- Hooks run in async subprocesses
+- Hooks communicate with a persistent daemon via client IDs or sessions
+- The first hook may fire before client registration completes
+
+Examples: file managers with remote commands, terminal multiplexers with
+status line updates, editors with server-mode IPC.
+
+### Debugging
+
+When hooks appear to fail silently:
+1. Run the tool with logging enabled
+2. Compare hook invocation log entries vs daemon receive/dispatch entries
+3. If the hook fires but no corresponding dispatch appears, the client was
+   not registered when the hook sent its IPC call
+4. Check the daemon's client registry — unregistered clients show empty
+   connection lists
+
+### Example: lf file manager
+
+lf uses `on-init` (sync, after client registration) and `on-load` (async,
+fires when directory contents are loaded). `lf -remote` sends commands to
+the lf server daemon via Unix socket.
+
+Race: `on-load` for the initial directory fires before the server has
+registered the client in `gConnList[id]`. `lf -remote "send $id ..."` sends
+to an empty list — message is dropped.
+
+Fix:
+```bash
+# Trigger reload after client is registered
+cmd on-init &{{
+    lf -remote "send $id reload"
+}}
+
+# on-load now runs with registered client — IPC succeeds
+cmd on-load &{{
+    # ... git status, parse files ...
+    lf -remote "send $id :$cmds"
+}}
+```
 
 ## COPYRIGHT & LICENSING
 
