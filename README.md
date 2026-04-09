@@ -18,7 +18,7 @@ When generating code for any fkzys project, assistants must follow the rules def
 
 ## How to Read This Document
 
-- **Sections 0–10, 13** — Technical specification: patterns, conventions, code structures
+- **Sections 0–10, 13, 15** — Technical specification: patterns, conventions, code structures, CI
 - **Section 11** — Code generation protocol: rules for assistants generating code in this ecosystem
 - **Section 12** — Quick reference: common snippets and commands
 - **Section 14** — Licensing
@@ -1318,14 +1318,6 @@ Preview:
 # SEE ALSO
 
 **related-tool**(8)
-
-# BUGS
-
-Report bugs at \<URL\>
-
-# LICENSE
-
-AGPL-3.0-or-later
 ```
 
 ### Required Sections (section 5 — config files)
@@ -1379,12 +1371,16 @@ man/%.8: man/%.8.md
 clean:
 	rm -f $(MANPAGES)
 
-install: man
+install:
 	install -Dm644 man/project-name.8 $(DESTDIR)$(MANDIR)/man8/project-name.8
 
 uninstall:
 	rm -f $(DESTDIR)$(MANDIR)/man8/project-name.8
 ```
+
+The `install` target MUST only install files — it MUST NOT trigger build steps
+(`man`, `build`, etc.). Build artifacts are the maintainer's responsibility to
+produce before running `make install`.
 
 ## 9. INFRASTRUCTURE (Python + Jinja2 + SOPS)
 
@@ -1458,6 +1454,7 @@ This section defines how code must be generated when working with fkzys projects
 4. **Include tests** or update test documentation when adding features. Test files use `set -uo pipefail` (no `-e`) — failures are counted, not caught by errexit.
 5. **Flag** `eval`, `chmod 777`, hardcoded secrets, missing ownership checks, `/tmp` usage for scripts.
 6. **Ask if uncertain** about paths, versions, or flags before generating.
+7. **When editing this specification**, new top-level sections are appended at the end with the next sequential number. Subsections MUST use dot notation (e.g., §8.1 MAN PAGES). Existing section numbers MUST NOT be changed.
 
 ## 12. QUICK TEMPLATES
 
@@ -1548,6 +1545,129 @@ git commit -S -m 'description'
 - **`-S`** — sign the commit
 
 This applies to both human-authored and LLM-generated commits. When LLM assistants generate code, the human reviewer must sign the resulting commit.
+
+### Conventional Commits
+
+All commits in ecosystem projects MUST follow the Conventional Commits format:
+
+```
+<type>: <description>
+```
+
+| Type | Purpose |
+|------|---------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `ci` | CI configuration changes |
+| `refactor` | Code change, no behavior change |
+| `test` | Test additions or changes |
+| `chore` | Maintenance, dependency updates, config |
+
+Examples:
+
+```
+feat: add --separate-home flag for isolated home subvolumes
+fix: handle missing ESP mount point gracefully
+docs: clarify test target rules in §3
+ci: call test scripts directly instead of make test
+```
+
+Scope may be added in parentheses: `fix(cli): handle --dry-run with custom tag`.
+
+Commits to this specification follow the same Conventional Commits format.
+
+## 15. CI (GitHub Actions)
+
+All projects SHOULD have `.github/workflows/ci.yml` with path-filtered triggers.
+
+### Path Filtering
+
+CI triggers MUST use `paths` (whitelist) to avoid running on unrelated changes
+(README edits, LICENSE updates, asset changes). Example:
+
+```yaml
+on:
+  push:
+    paths:
+      - 'bin/**'
+      - 'lib/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'bin/**'
+      - 'lib/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+```
+
+`paths-ignore` (blacklist) is NOT used — prefer explicit whitelisting.
+
+### Test Execution
+
+CI MUST call test commands directly, NOT through `make test`. This keeps CI
+output explicit and avoids coupling to the Makefile.
+
+| Language | CI command |
+|----------|-----------|
+| Shell | `bash tests/test.sh` or loop over `tests/test_*.sh` |
+| Python | `python -m pytest tests/ -v` |
+| Go | `go test ./... -v -count=1` |
+| C# | `dotnet test Project.Tests/Project.Tests.csproj` |
+
+Example — Shell project with multiple test files:
+
+```yaml
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: |
+          for t in tests/test_config.sh tests/test_cli.sh tests/test_commands.sh; do
+            echo "━━━ $$t ━━━"
+            bash "$$t" || exit 1
+          done
+```
+
+Example — Go project with `dorny/paths-filter`:
+
+```yaml
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            go:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yml'
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+      - run: go test ./... -v -count=1
+```
+
+### Linting
+
+Shell projects SHOULD run `shellcheck` in CI. Python projects SHOULD run
+`ruff` and `mypy`. C projects SHOULD run `cppcheck`. Go projects SHOULD
+run `go vet`.
 
 ## COPYRIGHT & LICENSING
 
