@@ -84,7 +84,7 @@ These rules apply to LLM assistants interacting with the ecosystem.
 | `etc/` | Default configuration files (installed to `/etc/`) |
 | `completions/` | `_cmd` (zsh), `cmd.bash` (bash) |
 | `man/` | Markdown sources (`.md`) + compiled roff (`.8`/`.5`) |
-| `tests/` | Test suite. Must include `tests/README.md` with table and instructions |
+| `tests/` | Test suite. If tests are present, SHOULD include `tests/README.md` with table and instructions |
 | `depends` | Dependencies. Format: `system:pkg` or `gitpkg:pkg`. `#` for comments |
 | `Makefile` | Targets: `build` (if needed), `install`, `uninstall`, `clean`, `test`, `man` |
 | `backup/` | Migration/backup scripts |
@@ -392,8 +392,9 @@ uninstall:
 - `DESTDIR =` (empty by default)
 - Config is never overwritten if it already exists
 - `man` target generates from `.md` via `pandoc`
-- `test` target is language-specific: `bash tests/test.sh` (shell), `go test ./...` (Go), `pytest` (Python — optional, not all projects have it), `dotnet test` (C#)
-- License installs to `$(SHAREDIR)/licenses/$(pkgname)`
+- `test` target SHOULD be present if the project contains tests. If the project has no test suite, the target may be omitted. Language-specific: `bash tests/test.sh` (shell), `go test ./...` (Go), `pytest` (Python), `dotnet test` (C#).
+- `clean` target MUST undo build artifacts, if any are present. For projects with no build step (e.g. pure shell libraries, install-only packages), it may be omitted or be a no-op.
+- The Makefile MUST install the project `LICENSE` to `$(SHAREDIR)/licenses/$(pkgname)/LICENSE`.
 - Go: `CGO_ENABLED=0`, `-trimpath`, `-buildmode=pie`, version via `-ldflags`
 - C#: `dotnet build -c Release`, `dotnet test --no-build`
 
@@ -889,8 +890,8 @@ CGO_ENABLED=0 go build -trimpath -buildmode=pie -ldflags "-X main.version=$(VERS
 ## 7. TESTING
 
 ### Test documentation: `tests/README.md` vs `tests.md`
-- **`tests/README.md`** — for Shell/Python/C projects where `tests/` is a directory containing test scripts (`test_config.sh`, `test_module.py`, etc.). The README lives inside that directory.
-- **`tests.md`** — for Go and C# projects where tests are part of the build system (`*_test.go` packages, `*.Tests.csproj` projects) and there is no standalone `tests/` script directory. The file lives at the repository root.
+- **`tests/README.md`** — for Shell/Python/C projects where `tests/` is a directory containing test scripts (`test_config.sh`, `test_module.py`, etc.). If the project contains a test suite, this file SHOULD be present inside that directory.
+- **`tests.md`** — for Go and C# projects where tests are part of the build system (`*_test.go` packages, `*.Tests.csproj` projects) and there is no standalone `tests/` script directory. If the project contains a test suite, this file SHOULD be present at the repository root.
 
 ### Shell/Python: `tests/README.md`
 
@@ -1256,7 +1257,7 @@ footer: project-name
 | `title` | Uppercase project name (matches `.TH` title) |
 | `section` | Man section: `8` for commands, `5` for file formats |
 | `header` | Center header (e.g., `System Administration`, `File Formats`) |
-| `footer` | Lower-right corner — project name |
+| `footer` | Lower-right corner — project name only. MUST NOT contain version, date, or other metadata. |
 
 Omit `date`.
 
