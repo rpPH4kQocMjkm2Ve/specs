@@ -1893,6 +1893,7 @@ Shell projects SHOULD measure test coverage in CI using `bash-coverage` (fkzys-t
           path: fkzys-tools
       - run: |
           for t in tests/test_*.sh; do
+            echo "━━━ $t ━━━"
             bash "$t" || exit 1
           done
       - run: bash fkzys-tools/bash-coverage --min-coverage 50 -p .
