@@ -887,6 +887,52 @@ func ComputeActions(rules []PermRule, managedPaths []string, dest string, isDirF
 CGO_ENABLED=0 go build -trimpath -buildmode=pie -ldflags "-X main.version=$(VERSION)" -o $(BINARY) ./cmd/project/
 ```
 
+### Linting
+
+Go projects SHOULD use `golangci-lint` in CI (§15). At minimum, `errcheck` and
+`staticcheck` SHOULD be enabled.
+
+All error return values MUST be checked. In tests, unhandled errors cause `t.Fatal`:
+
+```go
+if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+    t.Fatal(err)
+}
+if err := w.Close(); err != nil {
+    t.Fatalf("w.Close: %v", err)
+}
+```
+
+In production code, errors are returned:
+
+```go
+if err := tmp.Close(); err != nil {
+    return fmt.Errorf("close temp: %w", err)
+}
+if _, err := fmt.Fprintf(w, "%s [y/n]: ", question); err != nil {
+    return false, err
+}
+```
+
+In `defer` cleanup paths where the error cannot be meaningfully handled, use
+explicit `_ =` to signal intentional omission:
+
+```go
+defer func() { _ = os.Remove(tmpPath) }()
+defer func() { _ = f.Close() }()
+```
+
+Bare `defer` of functions returning `error` (e.g. `defer os.Chdir(oldWd)`) is
+not permitted — wrap in a closure.
+
+Loop-to-append replacement (staticcheck S1011):
+
+```go
+// replace manual slice copy with append
+symlinks := make([]string, 0, len(symlinkKeys))
+symlinks = append(symlinks, symlinkKeys...)
+```
+
 ## 7. TESTING
 
 ### Test documentation: `tests/README.md` vs `tests.md`
@@ -1471,6 +1517,7 @@ This section defines how code must be generated when working with fkzys projects
 7. **When editing this specification**, new top-level sections are appended at the end with the next sequential number. Subsections MUST use dot notation (e.g., §8.1 MAN PAGES). Existing section numbers MUST NOT be changed.
 8. **Before committing**, verify what will be included. Run `git status`, `git diff`, and `git diff --cached` to confirm all changes — staged and unstaged — match intent. Never use `git add -A && git commit` without stating expected contents.
 9. **Comments explain why, not what.** Comments should describe the reasoning behind a decision (`# avoid eval: TOCTOU risk`) or document non-obvious behaviour (`# on-load: one git status call, parse all files`). Never comment on what code obviously does (`# iterate files`, `# call function`). Omit trivial comments entirely.
+10. **No colorful emojis.** Do not use colorful emoji characters (e.g. graphic icons for objects, faces, animals) in specification text, code comments, or generated code. Simple Unicode symbols (checkmarks, arrows, box-drawing characters) are acceptable. Use plain-text markers like `BAD:` / `OK:` or `FIXME:` / `NOTE:` instead of colorful emojis.
 
 ## 12. QUICK TEMPLATES
 
