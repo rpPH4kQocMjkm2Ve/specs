@@ -129,7 +129,7 @@ set -euo pipefail
 **Exceptions (no `set -euo pipefail` required):**
 - **Test files** — use `set -uo pipefail` (no `-e`). Tests must continue executing when assertions fail so failures can be counted and reported. See §7 for test harness patterns.
 - **Wrapper scripts** — thin scripts that `cd` to a config directory and `exec` a binary (e.g. `dist/subs2srs.sh`). These are simple launchers, not business logic. If the `exec` fails, there is nothing left to do.
-- **Intentional guard scripts** — scripts that rely on conditional control flow incompatible with `errexit`. Must include a comment explaining the omission.
+- **Intentional guard scripts** — scripts that rely on conditional control flow incompatible with `errexit`. Must include a comment explaining the omission. Guard scripts are typically called by external hooks (e.g. pacman hooks) and may also be exempt from `verify-lib`/`_src()` entry point requirements, since they source libraries in a controlled execution context rather than as standalone entry points.
 
 ### CLI Conventions
 All bash entry points MUST support:
@@ -161,6 +161,17 @@ readonly LIBDIR="/usr/lib/project"
 _src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
 _src "${LIBDIR}/common.sh"
 ```
+
+### Fast Init Bypass (`*_NO_INIT`)
+
+Entry points that source `common.sh` may trigger expensive auto-initialization (filesystem scans, network checks, config validation). To keep `--help` and `-V` fast, entry points SHOULD set the appropriate `_*_NO_INIT` variable before sourcing:
+
+```bash
+readonly _GITPKG_NO_INIT=1
+_src "${LIBDIR}/common.sh"
+```
+
+The variable name matches the project (uppercased, hyphens to underscores). Setting it tells `common.sh` to skip initialization and return immediately. Test files SHOULD also set this flag to ensure test isolation.
 
 ### Error Handling
 ```bash
@@ -235,6 +246,22 @@ bwrap_base() {
 }
 ```
 
+Library functions that build or modify arrays passed by the caller SHOULD use `local -n` (nameref) instead of generating output for the caller to parse. This avoids `eval` (TOCTOU risk) and makes the API explicit.
+
+### Function Naming
+
+Functions SHOULD use `snake_case` naming. Internal helpers SHOULD be prefixed with an underscore (`_`).
+
+```bash
+# Public library function
+load_config() { ... }
+
+# Internal helper
+_validate_path() { ... }
+```
+
+CamelCase naming (e.g. `loadConfig`, `buildOverlay`) is discouraged for consistency across all projects in the ecosystem.
+
 ### Preserve/Restore shopt (NO eval)
 ```bash
 # Save state explicitly
@@ -252,12 +279,38 @@ else
 fi
 ```
 
+### Glob Safety
+
+Glob loops (`for x in pattern`) SHOULD set `shopt -s nullglob` before iterating to prevent literal pattern expansion when no matches exist. Without `nullglob`, a non-matching glob expands to the literal string (e.g. `for f in *.sh` → `f="*.sh"`), which can cause incorrect behaviour or errors.
+
+```bash
+shopt -s nullglob
+for f in *.sh; do
+    # safe: loop body only executes if files exist
+    process "$f"
+done
+shopt -u nullglob
+```
+
 ### Input Validation
 ```bash
 if [[ ! "$INPUT" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     echo "ERROR: Invalid input" >&2; exit 1
 fi
 ```
+
+Libraries that handle filesystem paths (especially those involving `DESTDIR` or install destinations) MUST validate paths to prevent directory traversal, absolute paths, and dangerous characters:
+
+```bash
+_validate_path() {
+    # Reject empty, absolute paths, traversal (..), and newlines
+    [[ -n "$1" && ! "$1" =~ ^/ && ! "$1" =~ \.\. && ! "$1" =~ $'\n' ]] || return 1
+    return 0
+}
+```
+
+Reject: absolute paths (`/usr/bin`), `..` traversal, newlines, empty strings.
+Accept: relative paths (`usr/bin/foo`), `..` as part of filenames (`foo..bar`).
 
 ## 3. MAKEFILE
 
@@ -1230,6 +1283,25 @@ dotnet test subs2srs.Tests/subs2srs.Tests.csproj --filter "FullyQualifiedName~Ut
 - Tests run sequentially to avoid singleton pollution
 ````
 
+### Coverage Measurement (Shell)
+
+Shell projects SHOULD measure test line coverage. Use `bash-coverage` (fkzys-tools) to collect coverage without modifying source files. It works via `BASH_ENV` + `DEBUG` trap (`set -T`), logging each executed line to a coverage file.
+
+```bash
+# Measure coverage for a single test
+bash-coverage -- bash tests/test_config.sh
+
+# Measure all tests in a project
+bash-coverage -p ./atomic-upgrade
+
+# Enforce minimum threshold
+bash-coverage --min-coverage 80 -- make test
+```
+
+Coverage is reported per file with color coding (green ≥80%, yellow ≥50%, red <50%). Executable-line heuristic excludes blank lines, comments, and structural keywords (`then`, `fi`, `do`, etc.) from the denominator. Test files (files under `tests/` or matching `test_*.sh`) are excluded from the report — coverage measures production code, not the test runner itself.
+
+CI MAY enforce minimum coverage thresholds using `--min-coverage`.
+
 ## 8. COMPLETIONS
 
 ### Zsh (`_cmd`)
@@ -1509,29 +1581,37 @@ gitpkg:verify-lib
 This section defines how code must be generated when working with fkzys projects. Assistants and developers creating new code must follow these rules.
 
 1. **Verify structure** (`Makefile`, `lib/`, `tests/` or `tests.md`) before adding files. For infrastructure projects (§9), these do not apply. Go projects use `go.mod` instead of `depends`.
-2. **Apply standards automatically**: `set -euo pipefail` (except in test files, wrappers, and guard scripts — see §2), whitelist config parser, `verify-lib` sourcing, `printf -v` instead of `eval`, explicit shopt restore.
+2. **Apply standards automatically**: `set -euo pipefail` (except in test files, wrappers, and guard scripts — see §2), whitelist config parser, `verify-lib` sourcing, `printf -v` instead of `eval`, explicit shopt restore, `*_NO_INIT` before sourcing library, `local -n` (nameref) for array parameters, `snake_case` function naming, `shopt -s nullglob` before glob loops, `_validate_path()` for install paths, absolute URLs for cross-repository links.
 3. **No placeholders**. Provide complete, runnable code.
 4. **Include tests** or update test documentation when adding features. Test files use `set -uo pipefail` (no `-e`) — failures are counted, not caught by errexit.
-5. **Flag** `eval`, `chmod 777`, hardcoded secrets, missing ownership checks, `/tmp` usage for scripts.
+5. **Flag** `eval`, `chmod 777`, hardcoded secrets, missing ownership checks, `/tmp` usage for scripts, bare `local -a/-A` in library functions without nameref, glob loops without `nullglob`, missing `_validate_path()` for install paths, relative links escaping repository root (`../`).
 6. **Ask if uncertain** about paths, versions, or flags before generating.
 7. **When editing this specification**, new top-level sections are appended at the end with the next sequential number. Subsections MUST use dot notation (e.g., §8.1 MAN PAGES). Existing section numbers MUST NOT be changed.
 8. **Before committing**, verify what will be included. Run `git status`, `git diff`, and `git diff --cached` to confirm all changes — staged and unstaged — match intent. Never use `git add -A && git commit` without stating expected contents.
 9. **Comments explain why, not what.** Comments should describe the reasoning behind a decision (`# avoid eval: TOCTOU risk`) or document non-obvious behaviour (`# on-load: one git status call, parse all files`). Never comment on what code obviously does (`# iterate files`, `# call function`). Omit trivial comments entirely.
 10. **No colorful emojis.** Do not use colorful emoji characters (e.g. graphic icons for objects, faces, animals) in specification text, code comments, or generated code. Simple Unicode symbols (checkmarks, arrows, box-drawing characters) are acceptable. Use plain-text markers like `BAD:` / `OK:` or `FIXME:` / `NOTE:` instead of colorful emojis.
+11. **Relative links only within same repository.** Relative paths (`../specs/README.md`, `./bin/script`) are only valid for files inside the same repository. References to external repositories MUST use absolute URLs (e.g. `https://gitlab.com/fkzys/specs/-/blob/main/README.md`). Never use `../` to escape the repository root in documentation.
 
 ## 12. QUICK TEMPLATES
 
 - Shell header: `#!/bin/bash\nset -euo pipefail`
 - Library header: `#!/usr/bin/env bash`
 - Test file header: `#!/usr/bin/env bash\nset -uo pipefail` (no `-e` — see §2 exceptions)
+- Guard script comment: `# Note: no "set -euo pipefail" — this script relies on conditional control flow incompatible with errexit`
 - Error: `echo "ERROR: msg" >&2; exit 1`
 - Config check: `[[ -n "${VAR:-}" ]] || { echo "ERROR: VAR not defined" >&2; exit 1; }`
+- Init bypass: `readonly _PROJECT_NO_INIT=1` before `_src common.sh`
+- Nameref: `local -n _arr=$1; _arr+=(--flag)`
+- Glob loop: `shopt -s nullglob; for f in *.sh; do ...; done; shopt -u nullglob`
+- Path validation: `_validate_path() { [[ -n "$1" && ! "$1" =~ ^/ && ! "$1" =~ \.\. && ! "$1" =~ $'\n' ]] || return 1; }`
+- Function naming: `snake_case()`, `_internal_helper()`
 - Make install: `install -Dm755 bin/cmd $(DESTDIR)$(PREFIX)/bin/cmd`
 - Python entry: `if __name__ == "__main__": main()`
 - Go main: `func main() { if err := run(); err != nil { fmt.Fprintf(os.Stderr, "project: %v\n", err); os.Exit(1) } }`
 - Go build: `CGO_ENABLED=0 go build -trimpath -buildmode=pie -ldflags "-X main.version=$(VERSION)"`
 - C# build: `dotnet build Project/Project.csproj -c Release`
 - Test run: `make test` or `bash tests/test.sh` or `python -m pytest tests/ -v` or `go test ./...` or `dotnet test Tests/Tests.csproj`
+- Coverage: `bash-coverage -p ./project` or `bash-coverage --min-coverage 80 -- make test`
 - Man YAML: `title: NAME\nsection: 8\nheader: System Administration\nfooter: project-name` (no `date`)
 - Man compile: `pandoc -s -t man cmd.8.md -o cmd.8`
 - SOPS: `sops -d secrets.enc.yaml`
@@ -1733,6 +1813,26 @@ Example — Go project with `dorny/paths-filter`:
 Shell projects SHOULD run `shellcheck` in CI. Python projects SHOULD run
 `ruff` and `mypy`. C projects SHOULD run `cppcheck`. Go projects SHOULD
 run `go vet`.
+
+### Coverage
+
+Shell projects SHOULD measure test coverage in CI using `bash-coverage` (fkzys-tools). The tool must be installed before use:
+
+```yaml
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: fkzys/fkzys-tools
+          path: fkzys-tools
+      - run: |
+          for t in tests/test_*.sh; do
+            bash "$t" || exit 1
+          done
+      - run: bash fkzys-tools/bash-coverage --min-coverage 50 -p .
+```
 
 ## 16. ASYNC HOOKS WITH DAEMON COMMUNICATION
 
