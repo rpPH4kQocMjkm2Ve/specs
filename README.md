@@ -1637,7 +1637,7 @@ This section defines how code must be generated when working with fkzys projects
 8. **Before committing**, verify what will be included. Run `git status`, `git diff`, and `git diff --cached` to confirm all changes — staged and unstaged — match intent. Never use `git add -A && git commit` without stating expected contents.
 9. **Comments explain why, not what.** Comments should describe the reasoning behind a decision (`# avoid eval: TOCTOU risk`) or document non-obvious behaviour (`# on-load: one git status call, parse all files`). Never comment on what code obviously does (`# iterate files`, `# call function`). Omit trivial comments entirely.
 10. **No colorful emojis.** Do not use colorful emoji characters (e.g. graphic icons for objects, faces, animals) in specification text, code comments, or generated code. Simple Unicode symbols (checkmarks, arrows, box-drawing characters) are acceptable. Use plain-text markers like `BAD:` / `OK:` or `FIXME:` / `NOTE:` instead of colorful emojis.
-11. **Relative links only within same repository.** Relative paths (`../specs/README.md`, `./bin/script`) are only valid for files inside the same repository. References to external repositories MUST use absolute URLs (e.g. `https://gitlab.com/fkzys/specs/-/blob/main/README.md`). Never use `../` to escape the repository root in documentation.
+11. **Relative links only within same repository.** Relative paths (`../specs/README.md`, `./bin/script`) are only valid for files inside the same repository. References to external repositories MUST use absolute URLs (e.g. `https://github.com/fkzys/specs/blob/main/README.md`). Never use `../` to escape the repository root in documentation.
 
 ## 12. QUICK TEMPLATES
 
