@@ -2038,7 +2038,7 @@ If you wish to use this specification, implement its patterns, or use its associ
 
 A commercial license grants a legal waiver from the AGPLv3 and CC BY-SA 4.0 copyleft requirements, permitting the use, modification, and integration of this work into private or commercial infrastructure without the obligation to disclose source code.
 
-Please contact **[main.component985@passfwd.com]** for commercial licensing inquiries.
+Please contact **[fkzys@proton.me]** for commercial licensing inquiries.
 
 ---
 *Unless required by applicable law or agreed to in writing, the specification and code distributed under the Open Source licenses are distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.*
