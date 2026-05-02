@@ -54,7 +54,7 @@ The following project types are **infrastructure or data**, not installable pack
 |------|----------|--------------|
 | Infrastructure-as-code | `infra`, `tf-infra` | §4 (Python patterns), §9 (SOPS, Jinja2), README |
 | Container images | `sing-box` | Dockerfile conventions, CI validation |
-| Dotfiles / config repos | `root_m`, `dotfiles` | dotm patterns (`dotm.toml`, `perms`, `.sops.yaml`) |
+| Dotfiles / config repos | `rootfiles`, `dotfiles` | dotm patterns (`dotm.toml`, `perms`, `.sops.yaml`) |
 | Data / rule sets | `sing-box_srs` | `build.sh` with `set -euo pipefail` |
 | Profiles / documentation | `gitlab-profile`, `packages` | README only |
 
